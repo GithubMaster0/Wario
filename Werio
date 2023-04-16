@@ -1,0 +1,254 @@
+import discord
+import random
+from discord.ext import commands
+import DiscordUtils
+
+TOKEN = 'MTA5NjgzMTI0NTAwNDA2MjcyMA.GSx3Gj.SwufIDExjiKZaxWQesh7cVesh7eOYWUp5Oomc4'
+PREFIX = '!'
+
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+
+
+@bot.event
+async def on_ready():
+    print(f'{bot.user} is now connected to Discord!')
+
+
+@bot.command(name='purge')
+@commands.has_permissions(manage_messages=True)
+async def purge(ctx, limit: int):
+    """Deletes a specified number of messages."""
+    await ctx.channel.purge(limit=limit + 1)
+
+
+@bot.command(name='kick')
+@commands.has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member, *, reason=None):
+    """Kicks a specified member from the server."""
+    await member.kick(reason=reason)
+    await ctx.send(f'{member.mention} has been kicked.')
+
+
+@bot.command(name='ban')
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason=None):
+    """Bans a specified member from the server."""
+    await member.ban(reason=reason)
+    await ctx.send(f'{member.mention} has been banned.')
+
+
+@bot.command(name='unban')
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, *, member):
+    """Unbans a specified member from the server."""
+    banned_users = await ctx.guild.bans()
+    member_name, member_discriminator = member.split('#')
+
+    for ban_entry in banned_users:
+        user = ban_entry.user
+
+        if (user.name, user.discriminator) == (member_name, member_discriminator):
+            await ctx.guild.unban(user)
+            await ctx.send(f'{user.mention} has been unbanned.')
+            return
+
+
+@bot.command(name='mute')
+@commands.has_permissions(manage_roles=True)
+async def mute(ctx, member: discord.Member):
+    """Mutes a specified member."""
+    role = discord.utils.get(ctx.guild.roles, name='Muted')
+
+    if role is None:
+        role = await ctx.guild.create_role(name='Muted')
+
+        for channel in ctx.guild.channels:
+            await channel.set_permissions(role, speak=False, send_messages=False)
+
+    await member.add_roles(role)
+    await ctx.send(f'{member.mention} has been muted.')
+
+
+@bot.command(name='unmute')
+@commands.has_permissions(manage_roles=True)
+async def unmute(ctx, member: discord.Member):
+    """Unmutes a specified member."""
+    role = discord.utils.get(ctx.guild.roles, name='Muted')
+
+    if role in member.roles:
+        await member.remove_roles(role)
+        await ctx.send(f'{member.mention} has been unmuted.')
+    else:
+        await ctx.send(f'{member.mention} is not muted.')
+
+
+@bot.command(name='nickname')
+async def set_nickname(ctx, member: discord.Member, *, nickname: str):
+    """Sets the nickname of a specified member."""
+    await member.edit(nick=nickname)
+    await ctx.send(f'{member.mention}\'s nickname has been set to {nickname}.')
+
+
+@bot.command(name='addrole')
+async def add_role(ctx, member: discord.Member, *, role_name: str):
+    """Adds a specified role to a specified member."""
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
+
+    if role is None:
+        await ctx.send(f'Role "{role_name}" not found.')
+        return
+
+    await member.add_roles(role)
+    await ctx.send(f'{member.mention} has been given the "{role_name}" role.')
+
+
+@bot.command(name='removerole')
+async def remove_role(ctx, member: discord.Member, *, role_name: str):
+    """Removes a specified role from a specified member."""
+    role = discord.utils.get(ctx.guild.roles, name=role_name)
+
+    if role is None:
+        await ctx.send(f'Role "{role_name}" not found.')
+        return
+
+    await member.remove_roles(role)
+    await ctx.send(f'{member.mention} has had the "{role_name}" role removed.')
+
+
+@bot.command(name='lock')
+async def lock_channel(ctx):
+    """Disables sending messages in the current channel for all members."""
+    await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+    await ctx.send(f'This channel has been locked.')
+
+
+@bot.command(name='unlock')
+async def unlock_channel(ctx):
+    """Enables sending messages in the current channel for all members."""
+    await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
+    await ctx.send(f'This channel has been unlocked.')
+
+
+@bot.command(name='poll')
+async def create_poll(ctx, question: str, *options: str):
+    """Creates a poll with a specified question and multiple options."""
+    if len(options) <= 1:
+        await ctx.send('You need more than one option to create a poll!')
+        return
+
+    if len(options) > 10:
+        await ctx.send('You cannot have more than 10 options!')
+        return
+
+    if len(options) == 2 and options[0].lower() == 'yes' and options[1].lower() == 'no':
+        reactions = ['👍', '👎']
+    else:
+        reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+
+    description = ''
+    for i, option in enumerate(options):
+        description += f'{reactions[i]} {option}\n'
+
+    embed = discord.Embed(title=question, description=description, color=discord.Color.blurple())
+    message = await ctx.send(embed=embed)
+
+    for reaction in reactions[:len(options)]:
+        await message.add_reaction(reaction)
+
+    await ctx.message.delete()
+
+
+@bot.command(name='commands')
+async def help_command(ctx):
+    """Displays all available commands and their usage."""
+    help_embed = discord.Embed(title='Bot Commands')
+    fields = []
+    for command in bot.commands:
+        if command.name != 'help':
+            fields.append((f'!{command.name}', f'{command.help}'))
+    paginator = DiscordUtils.Pagination.CustomEmbedPaginator(ctx, remove_reactions=True)
+    paginator.add_reaction('⏮️', "first")
+    paginator.add_reaction('⏪', "back")
+    paginator.add_reaction('⏩', "next")
+    paginator.add_reaction('⏭️', "last")
+    embeds = []
+    for name, value in fields:
+        help_embed.add_field(name=name, value=value, inline=False)
+        if len(help_embed) >= 400:
+            embeds.append(help_embed)
+            help_embed = discord.Embed(title='Bot Commands')
+    embeds.append(help_embed)
+    await paginator.run(embeds)
+
+
+@bot.command(name='kanye')
+async def kanye_quote(ctx):
+    """Displays a random Kanye West quote."""
+    quotes = ['I’m a creative genius and there’s no other way to word it.',
+              'I will go down as the voice of this generation, of this decade, I will be the loudest voice.',
+              'I’m like a vessel, and God has chosen me to be the voice and the connector.',
+              'I am God’s vessel. But my greatest pain in life is that I will never be able to see myself perform live.']
+    await ctx.send(random.choice(quotes))
+
+
+@bot.command(name='catfact')
+async def cat_fact(ctx):
+    """Displays a random cat fact."""
+    facts = ['Cats can make over 100 sounds.',
+             'A group of cats is called a clowder.',
+             'Cats are believed to be the only mammals who don’t taste sweetness.',
+             'Cats sleep for 70% of their lives.',
+             'Cats have 5 toes on their front paws, but only 4 on their back ones.']
+    await ctx.send(random.choice(facts))
+
+
+@bot.command(name='dad_joke')
+async def dad_joke(ctx):
+    """Displays a random dad joke."""
+    jokes = ['Why did the tomato turn red? Because it saw the salad dressing!',
+             'Why did the scarecrow win an award? Because he was outstanding in his field!',
+             'Why don’t scientists trust atoms? Because they make up everything!',
+             'Why did the math book look sad? Because it had too many problems.']
+    await ctx.send(random.choice(jokes))
+
+
+@bot.command(name='8ball')
+async def magic_eight_ball(ctx, *, question):
+    """Answers a yes-or-no question with a random response."""
+    responses = ['It is certain.', 'It is decidedly so.', 'Without a doubt.', 'Yes - definitely.',
+                 'You may rely on it.', 'As I see it, yes.', 'Most likely.', 'Outlook good.',
+                 'Yes.', 'Signs point to yes.', 'Reply hazy, try again.', 'Ask again later.',
+                 'Better not tell you now.', 'Cannot predict now.', 'Concentrate and ask again.',
+                 'Don’t count on it.', 'Outlook not so good.', 'My sources say no.', 'Very doubtful.']
+    await ctx.send(f'Question: {question}\nAnswer: {random.choice(responses)}')
+
+
+@bot.command(name='roastme')
+async def insult(ctx):
+    """Responds with a random insult."""
+    insults = ['I’ve seen people like you before, but I had to pay admission.',
+               'You’re so dense, light bends around you.',
+               'You’re a grey sprinkle on a rainbow cupcake.',
+               'I’ve been called worse things by better people.',
+               'It looks like your face caught on fire and someone tried to put it out with a fork.']
+    await ctx.send(random.choice(insults))
+
+
+@bot.command(name='hug')
+async def hug_command(ctx):
+    """Sends a virtual hug."""
+    await ctx.send(f'{ctx.author.mention} *hugs*')
+
+
+@bot.command(name='compliment')
+async def compliment(ctx):
+    """Responds with a random compliment."""
+    compliments = ['You have a great sense of humor.', 'You have impeccable manners.',
+                   'You are the most perfect you there is.', 'You’re strong and capable.',
+                   'You have a beautiful smile.', 'You always know how to make someone feel better.',
+                   'You have a heart of gold.', 'Your kindness is unmatched.',
+                   'You are a ray of sunshine on a cloudy day.']
+    await ctx.send(random.choice(compliments))
+
+
+bot.run(TOKEN)
